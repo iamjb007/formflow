@@ -1,25 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Send, CheckCircle2 } from 'lucide-react';
+import { db } from '../config/firebase';
+import { doc, getDoc, collection, addDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
 
 export default function PublicForm() {
   const { formId } = useParams();
   const [submitted, setSubmitted] = useState(false);
   const [responses, setResponses] = useState({});
+  const [formData, setFormData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Mock Form Data (In reality, fetch this from Firestore using formId)
-  const formData = {
-    title: 'Customer Satisfaction Survey',
-    description: 'We value your feedback! Please take a moment to tell us about your experience.',
-    themeColor: 'purple',
-    questions: [
-      { id: 'q1', type: 'short_answer', text: 'What is your Full Name?', required: true },
-      { id: 'q2', type: 'multiple_choice', text: 'How satisfied were you with our service?', required: true, options: ['Very Satisfied', 'Satisfied', 'Neutral', 'Dissatisfied'] },
-      { id: 'q3', type: 'checkboxes', text: 'Which features did you use?', required: false, options: ['Dashboard', 'Form Builder', 'Analytics', 'Export to CSV'] },
-      { id: 'q4', type: 'paragraph', text: 'Any additional comments or suggestions?', required: false }
-    ]
-  };
+  useEffect(() => {
+    const fetchForm = async () => {
+      try {
+        const docRef = doc(db, 'forms', formId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setFormData(docSnap.data());
+        }
+      } catch (err) {
+        console.error("Error loading form:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (formId) fetchForm();
+  }, [formId]);
 
   const handleResponseChange = (questionId, value, isCheckbox = false) => {
     if (isCheckbox) {
@@ -36,14 +45,31 @@ export default function PublicForm() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulate API Submission
-    console.log('Submitting responses:', responses);
-    setTimeout(() => {
+    setSubmitting(true);
+    try {
+      // Create response record
+      await addDoc(collection(db, 'responses'), {
+        formId,
+        answers: responses,
+        submittedAt: serverTimestamp()
+      });
+      // Increment tally on main form
+      const formRef = doc(db, 'forms', formId);
+      await updateDoc(formRef, {
+        responses: increment(1)
+      });
       setSubmitted(true);
-    }, 800);
+    } catch (err) {
+      console.error("Submission failed:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) return <div className="text-center mt-20 text-slate-500">Loading form...</div>;
+  if (!formData) return <div className="text-center mt-20 text-slate-500">Form not found.</div>;
 
   if (submitted) {
     return (
@@ -166,9 +192,10 @@ export default function PublicForm() {
         <div className="flex items-center justify-between pt-4">
           <button 
             type="submit"
-            className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all active:scale-95"
+            disabled={submitting}
+            className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all active:scale-95 disabled:opacity-70"
           >
-            Submit <Send size={18} />
+            {submitting ? 'Submitting...' : <>Submit <Send size={18} /></>}
           </button>
           <span className="text-sm text-slate-400">Never submit passwords through forms.</span>
         </div>

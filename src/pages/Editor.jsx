@@ -1,29 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { Plus, GripVertical, Trash2, Copy, Image as ImageIcon, Settings, Eye, ChevronLeft } from 'lucide-react';
+import { Plus, GripVertical, Trash2, Copy, Image as ImageIcon, Settings, Eye, ChevronLeft, Save } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { db } from '../config/firebase';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Editor() {
   const { formId } = useParams();
   const navigate = useNavigate();
   
-  const [formDetails, setFormDetails] = useState({
-    title: 'Untitled Form',
-    description: ''
-  });
+  const [formDetails, setFormDetails] = useState({ title: 'Loading...', description: '' });
+  const [questions, setQuestions] = useState([]);
+  const [activeQuestionId, setActiveQuestionId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const [questions, setQuestions] = useState([
-    { 
-      id: `q-${Date.now()}`, 
-      type: 'multiple_choice', 
-      text: 'Untitled Question', 
-      required: false, 
-      options: ['Option 1'] 
+  useEffect(() => {
+    const loadForm = async () => {
+      try {
+        const docRef = doc(db, 'forms', formId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setFormDetails({ title: data.title, description: data.description || '' });
+          if (data.questions && data.questions.length > 0) {
+            setQuestions(data.questions);
+            setActiveQuestionId(data.questions[0].id);
+          } else {
+            // Fallback empty question
+            const initialQ = { id: `q-${Date.now()}`, type: 'multiple_choice', text: '', required: false, options: ['Option 1'] };
+            setQuestions([initialQ]);
+            setActiveQuestionId(initialQ.id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading form:", err);
+      }
+    };
+    if (formId) loadForm();
+  }, [formId]);
+
+  const saveForm = async () => {
+    setSaving(true);
+    try {
+      const docRef = doc(db, 'forms', formId);
+      await updateDoc(docRef, {
+        title: formDetails.title,
+        description: formDetails.description,
+        questions: questions,
+        lastEdited: serverTimestamp()
+      });
+      alert('Form Saved Successfully!');
+    } catch (err) {
+      console.error('Error saving form', err);
+    } finally {
+      setSaving(false);
     }
-  ]);
-
-  const [activeQuestionId, setActiveQuestionId] = useState(questions[0].id);
+  };
 
   // Handlers for Questions
   const addQuestion = () => {
@@ -110,14 +143,22 @@ export default function Editor() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors tooltip-trigger" title="Preview">
+          <button 
+            onClick={() => navigate(`/f/${formId}`)}
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors tooltip-trigger" 
+            title="Preview"
+          >
             <Eye size={20} />
           </button>
           <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors" title="Settings">
             <Settings size={20} />
           </button>
-          <button className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-            Save & Publish
+          <button 
+            onClick={saveForm}
+            disabled={saving}
+            className="px-5 py-2 flex items-center gap-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-70"
+          >
+            {saving ? 'Saving...' : <><Save size={16}/> Save & Publish</>}
           </button>
         </div>
       </div>

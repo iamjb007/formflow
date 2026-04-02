@@ -1,16 +1,35 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { auth } from '../config/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function Login() {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulate auth success and navigate
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', '')); // Clean up error message
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,6 +50,13 @@ export default function Login() {
             </p>
           </div>
 
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-lg text-sm flex items-start gap-2 border border-red-100">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div className="space-y-1">
@@ -39,7 +65,6 @@ export default function Login() {
                   <input 
                     type="text" 
                     placeholder="John Doe"
-                    required
                     className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all text-slate-800"
                   />
                 </div>
@@ -53,6 +78,8 @@ export default function Login() {
                   type="email" 
                   placeholder="name@company.com"
                   required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all text-slate-800"
                 />
                 <Mail className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -69,6 +96,8 @@ export default function Login() {
                   type="password" 
                   placeholder="••••••••"
                   required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all text-slate-800"
                 />
                 <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -77,9 +106,11 @@ export default function Login() {
 
             <button 
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:hover:scale-100"
             >
-              {isLogin ? 'Sign In' : 'Sign Up'} <ArrowRight size={18} />
+              {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')} 
+              {!loading && <ArrowRight size={18} />}
             </button>
           </form>
 
@@ -87,7 +118,11 @@ export default function Login() {
             <p className="text-sm text-slate-600">
               {isLogin ? "Don't have an account?" : "Already have an account?"}
               <button 
-                onClick={() => setIsLogin(!isLogin)}
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                }}
                 className="ml-2 font-semibold text-blue-600 hover:text-blue-700 transition-colors"
               >
                 {isLogin ? 'Sign up' : 'Log in'}
